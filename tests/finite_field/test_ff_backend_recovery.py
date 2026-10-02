@@ -61,7 +61,20 @@ def main():
     run(z3, small + "(check-sat-using ff-unique)", "unsat", "smt.ff.unique_depth=4294967295")
     # Binary encodings are not injective across modular wrap-around: 0 = 7.
     run(z3, bit_pair(7, 3) + "(check-sat)", "sat")
-    print(json.dumps({"depth": 60000, "checks": 8, "local_budget_recovery": True}))
+
+    # When native algebra is exhausted, the exact BV fallback is only built if its
+    # estimated size is within ff.bv_fallback_limit; otherwise the theory gives up
+    # (unknown) instead of bit-blasting. The default (0) keeps the fallback.
+    system = ("(set-logic QF_FF)\n(define-sort F () (_ FiniteField 257))\n"
+              "(declare-const x F)\n(declare-const y F)\n(declare-const z F)\n"
+              "(assert (= (ff.mul x y z) (as ff5 F)))\n"
+              "(assert (= (ff.add (ff.mul x x) (ff.mul y y) (ff.mul z z)) (as ff9 F)))\n"
+              "(assert (= (ff.mul x x x) (ff.add y (as ff3 F))))\n(check-sat-using smt)")
+    stats = run(z3, system, "sat", "smt.ff.max_terms=1")
+    assert stats["ff-bv-fallbacks"] >= 1, stats
+    run(z3, system, "unknown", "smt.ff.max_terms=1", "smt.ff.bv_fallback_limit=1")
+    run(z3, system, "sat", "smt.ff.max_terms=1", "smt.ff.bv_fallback_limit=1000000")
+    print(json.dumps({"depth": 60000, "checks": 11, "local_budget_recovery": True}))
 
 
 if __name__ == "__main__":
